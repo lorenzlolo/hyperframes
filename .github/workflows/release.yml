@@ -1,0 +1,55 @@
+name: Prepare Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g., 0.2.0, 1.0.0-beta.1)"
+        required: true
+        type: string
+
+jobs:
+  prepare:
+    name: Prepare release PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Bump versions
+        run: pnpm set-version ${{ inputs.version }}
+
+      - name: Create release PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="release/v${{ inputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add packages/*/package.json
+          git commit -m "chore: release v${{ inputs.version }}"
+          git push origin "$BRANCH"
+          gh pr create \
+            --title "chore: release v${{ inputs.version }}" \
+            --body "$(cat <<'BODY'
+          ## Release v${{ inputs.version }}
+
+          Bumps all packages to v${{ inputs.version }}.
+
+          **After merging**, the release tag is created automatically, which triggers npm publish.
+          BODY
+          )" \
+            --base main \
+            --head "$BRANCH"

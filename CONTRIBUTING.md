@@ -46,29 +46,25 @@ pnpm --filter @hyperframes/core test:hyperframe-runtime-ci  # Runtime contract t
 
 All packages use **fixed versioning** — every release bumps all packages to the same version.
 
-### Steps
+### Via GitHub UI (recommended)
+
+1. Go to **Actions** → **Prepare Release** → **Run workflow**
+2. Enter the version (e.g., `0.2.0`)
+3. Click **Run workflow** — this creates a release PR
+4. Review and merge the PR
+5. Merging auto-creates the `v0.2.0` tag, which triggers npm publish and a GitHub Release
+
+### Via CLI
 
 ```bash
-# 1. Bump version, commit, and tag
-pnpm set-version 0.1.1 --tag
-
-# 2. Push to trigger the publish workflow
-git push origin main --tags
-```
-
-The `v*` tag triggers CI, which validates (build + typecheck + tests) then publishes all packages to npm with provenance attestation.
-
-### Without `--tag` (manual control)
-
-```bash
-# 1. Bump versions only (no commit/tag)
-pnpm set-version 0.1.1
-
-# 2. Review changes, commit yourself
-git add -A
-git commit -m "chore: release v0.1.1"
-git tag v0.1.1
-git push origin main --tags
+# Bump versions, commit to a branch, create PR
+pnpm set-version 0.2.0
+git checkout -b release/v0.2.0
+git add packages/*/package.json
+git commit -m "chore: release v0.2.0"
+git push origin release/v0.2.0
+gh pr create --title "chore: release v0.2.0" --base main
+# After merge, the tag + publish happen automatically
 ```
 
 ## Reporting Issues

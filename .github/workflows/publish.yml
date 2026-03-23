@@ -12,7 +12,7 @@ jobs:
     timeout-minutes: 10
     environment: npm-publish
     permissions:
-      contents: read
+      contents: write
       id-token: write
     steps:
       - uses: actions/checkout@v4
@@ -41,3 +41,13 @@ jobs:
 
       - name: Publish hyperframes (CLI)
         run: pnpm --filter hyperframes publish --access public --provenance --no-git-checks
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          gh release create "v${VERSION}" \
+            --repo "${{ github.repository }}" \
+            --title "v${VERSION}" \
+            --generate-notes
