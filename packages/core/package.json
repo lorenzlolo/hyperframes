@@ -1,6 +1,6 @@
 {
   "name": "@hyperframes/core",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -54,7 +54,6 @@
     "build:hyperframes-runtime": "tsx scripts/build-hyperframes-runtime-artifact.ts",
     "build:hyperframes-runtime:modular": "SANDBOX_RUNTIME_VARIANT=modular tsx scripts/build-hyperframes-runtime-artifact.ts",
     "build:hyperframe-runtime": "tsx scripts/build-hyperframes-runtime-artifact.ts",
-
     "test:hyperframe-runtime-contract": "tsx scripts/test-hyperframe-runtime-contract.ts",
     "test:hyperframe-runtime-behavior": "tsx scripts/test-hyperframe-runtime-behavior.ts",
     "test:hyperframe-runtime-seek": "tsx scripts/test-hyperframe-runtime-seek.ts",

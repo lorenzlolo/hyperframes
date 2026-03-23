@@ -1,6 +1,6 @@
 {
   "name": "hyperframes",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "HyperFrames CLI — create, preview, and render HTML video compositions",
   "type": "module",
   "bin": {
