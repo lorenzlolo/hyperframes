@@ -1,5 +1,6 @@
 import { defineCommand } from "citty";
 import { existsSync, mkdirSync, statSync } from "node:fs";
+import { cpus } from "node:os";
 import { resolve, dirname, join } from "node:path";
 import { resolveProject } from "../utils/project.js";
 import { loadProducer } from "../utils/producer.js";
@@ -11,6 +12,24 @@ import { trackRenderComplete, trackRenderError } from "../telemetry/events.js";
 const VALID_FPS = new Set([24, 30, 60]);
 const VALID_QUALITY = new Set(["draft", "standard", "high"]);
 const VALID_FORMAT = new Set(["mp4", "webm"]);
+
+/**
+ * Calculate a conservative default worker count for CLI use.
+ *
+ * Uses half of available CPU cores, capped at 4. Each worker spawns a
+ * separate Chrome browser process (~256 MB RAM each), so we default lower
+ * than a production server would. Remotion uses a similar heuristic
+ * (50% of CPU threads) but can use tabs within a single browser — we need
+ * separate processes, so the per-worker cost is higher.
+ *
+ *   2-core laptop  → 1 worker
+ *   4-core laptop  → 2 workers
+ *   8-core desktop → 4 workers
+ *  16-core server  → 4 workers (capped)
+ */
+function defaultWorkerCount(): number {
+  return Math.max(1, Math.min(Math.floor(cpus().length / 2), 4));
+}
 
 export default defineCommand({
   meta: {
@@ -24,19 +43,47 @@ Examples:
   hyperframes render --docker --output deterministic.mp4`,
   },
   args: {
-    dir: { type: "positional", description: "Project directory", required: false },
-    output: { type: "string", description: "Output path (default: renders/<name>.mp4)" },
-    fps: { type: "string", description: "Frame rate: 24, 30, 60", default: "30" },
-    quality: { type: "string", description: "Quality: draft, standard, high", default: "standard" },
+    dir: {
+      type: "positional",
+      description: "Project directory",
+      required: false,
+    },
+    output: {
+      type: "string",
+      description: "Output path (default: renders/<name>.mp4)",
+    },
+    fps: {
+      type: "string",
+      description: "Frame rate: 24, 30, 60",
+      default: "30",
+    },
+    quality: {
+      type: "string",
+      description: "Quality: draft, standard, high",
+      default: "standard",
+    },
     format: {
       type: "string",
       description: "Output format: mp4, webm (WebM renders with transparency)",
       default: "mp4",
     },
-    workers: { type: "string", description: "Parallel workers 1-8" },
-    docker: { type: "boolean", description: "Use Docker for deterministic render", default: false },
+    workers: {
+      type: "string",
+      description:
+        "Parallel render workers (1-8 or 'auto'). Default: half your CPU cores, max 4. " +
+        "Each worker launches a separate Chrome process.",
+    },
+    docker: {
+      type: "boolean",
+      description: "Use Docker for deterministic render",
+      default: false,
+    },
     gpu: { type: "boolean", description: "Use GPU encoding", default: false },
-    quiet: { type: "boolean", description: "Suppress verbose output", default: false },
+    quiet: {
+      type: "boolean",
+      description: "Suppress verbose output",
+      default: false,
+    },
   },
   async run({ args }) {
     // ── Resolve project ────────────────────────────────────────────────────
@@ -68,10 +115,10 @@ Examples:
 
     // ── Validate workers ──────────────────────────────────────────────────
     let workers: number | undefined;
-    if (args.workers != null) {
+    if (args.workers != null && args.workers !== "auto") {
       const parsed = parseInt(args.workers, 10);
       if (isNaN(parsed) || parsed < 1 || parsed > 8) {
-        errorBox("Invalid workers", `Got "${args.workers}". Must be between 1 and 8.`);
+        errorBox("Invalid workers", `Got "${args.workers}". Must be 1-8 or "auto".`);
         process.exit(1);
       }
       workers = parsed;
@@ -95,8 +142,12 @@ Examples:
     const quiet = args.quiet ?? false;
 
     // ── Print render plan ─────────────────────────────────────────────────
-    const workerCount = workers ?? 4;
+    const workerCount = workers ?? defaultWorkerCount();
     if (!quiet) {
+      const workerLabel =
+        args.workers != null
+          ? `${workerCount} workers`
+          : `${workerCount} workers (auto \u2014 half of ${cpus().length} cores)`;
       console.log("");
       console.log(
         c.accent("\u25C6") +
@@ -104,9 +155,7 @@ Examples:
           c.accent(project.name) +
           c.dim(" \u2192 " + outputPath),
       );
-      console.log(
-        c.dim("   " + fps + "fps \u00B7 " + quality + " \u00B7 " + workerCount + " workers"),
-      );
+      console.log(c.dim("   " + fps + "fps \u00B7 " + quality + " \u00B7 " + workerLabel));
       console.log("");
     }
 
@@ -205,7 +254,11 @@ async function renderDocker(
     });
     await producer.executeRenderJob(job, projectDir, outputPath);
   } catch (error: unknown) {
-    trackRenderError({ fps: options.fps, quality: options.quality, docker: true });
+    trackRenderError({
+      fps: options.fps,
+      quality: options.quality,
+      docker: true,
+    });
     const message = error instanceof Error ? error.message : String(error);
     errorBox("Render failed", message, "Check Docker is running: docker info");
     process.exit(1);
@@ -216,7 +269,7 @@ async function renderDocker(
     durationMs: elapsed,
     fps: options.fps,
     quality: options.quality,
-    workers: options.workers ?? 4,
+    workers: options.workers ?? defaultWorkerCount(),
     docker: true,
     gpu: options.gpu,
   });
@@ -256,7 +309,11 @@ async function renderLocal(
   try {
     await producer.executeRenderJob(job, projectDir, outputPath, onProgress);
   } catch (error: unknown) {
-    trackRenderError({ fps: options.fps, quality: options.quality, docker: false });
+    trackRenderError({
+      fps: options.fps,
+      quality: options.quality,
+      docker: false,
+    });
     const message = error instanceof Error ? error.message : String(error);
     errorBox("Render failed", message, "Try --docker for containerized rendering");
     process.exit(1);
@@ -267,7 +324,7 @@ async function renderLocal(
     durationMs: elapsed,
     fps: options.fps,
     quality: options.quality,
-    workers: options.workers ?? 4,
+    workers: options.workers ?? defaultWorkerCount(),
     docker: false,
     gpu: options.gpu,
   });
