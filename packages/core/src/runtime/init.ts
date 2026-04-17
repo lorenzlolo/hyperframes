@@ -1190,6 +1190,7 @@ export function initSandboxRuntimeModular(): void {
       playing: state.isPlaying,
       playbackRate: state.playbackRate,
       outputMuted: state.mediaOutputMuted,
+      userMuted: state.bridgeMuted,
       onAutoplayBlocked: () => {
         if (state.mediaAutoplayBlockedPosted) return;
         state.mediaAutoplayBlockedPosted = true;
